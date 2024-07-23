@@ -12,7 +12,13 @@ BOOL TLInjectDll(DWORD processID, TCHAR* dllPath)
     HANDLE hProcess = OpenProcess(PROCESS_ALL_ACCESS, FALSE, processID);
     if (hProcess == NULL)
     {
-        printf("Unable to open target process. Error code: %d\n", static_cast<unsigned long>(GetLastError()));
+        unsigned long error = static_cast<unsigned long>(GetLastError());
+        if (error == 5)
+        {
+            printf("Access to open target process denied. Consider running as administrator\n");
+            return 0;
+        }
+        printf("Unable to open target process. Error code: %d\n", error);
         return 0;
     }
     // Allocate memory for dll path
@@ -53,13 +59,18 @@ BOOL TLInjectDll(DWORD processID, TCHAR* dllPath)
         CloseHandle(hProcess);
         return 0;
     }
+    printf("Created remote thread\n");
+    getchar();
     // Wait for the remote thread to finish
     WaitForSingleObject(hThread, INFINITE);
+    printf("Remote thread finished\n");
+    getchar();
     // Clean up resources
     CloseHandle(hThread);
     VirtualFreeEx(hProcess, remoteBuf, 0, MEM_RELEASE);
     CloseHandle(hProcess);
     printf("DLL injected successfully.\n");
+    getchar();
     return 1;
 }
 
