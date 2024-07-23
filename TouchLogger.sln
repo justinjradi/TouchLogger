@@ -7,6 +7,8 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "TouchLoggerMain", "TouchLog
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "TouchLoggerDll", "TouchLoggerDll\TouchLoggerDll.vcxproj", "{C4C2A247-6715-440F-914A-9038A2C68C37}"
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "Shared Items", "Shared Items\Shared Items.vcxitems", "{AA13B044-9C3C-429E-A072-EE53DE1F2EDE}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x64 = Debug|x64
