@@ -21,12 +21,18 @@ BOOL TLInjectDll(DWORD processID, TCHAR* dllPath)
         printf("Unable to open target process. Error code: %d\n", error);
         return 0;
     }
-    // Allocate memory for dll path
-    size_t pathLength = _tcslen(dllPath);
-    LPVOID remoteBuf = VirtualAllocEx(hProcess, NULL, pathLength, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+    // Allocate memory for dll path in target process
+    LPVOID remoteBuf = VirtualAllocEx(hProcess, NULL, _tcslen(dllPath), MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
     if (remoteBuf == NULL)
     {
         printf("Could not allocate memory in target process. Error code: %d\n", static_cast<unsigned long>(GetLastError()));
+        CloseHandle(hProcess);
+        return 0;
+    }
+    // Write DLL path to allocated memory
+    if (!WriteProcessMemory(hProcess, remoteBuf, dllPath, _tcslen(dllPath), NULL)) {
+        printf("Could not write to process memory. Error code: %d\n", GetLastError());
+        VirtualFreeEx(hProcess, remoteBuf, 0, MEM_RELEASE);
         CloseHandle(hProcess);
         return 0;
     }
@@ -60,17 +66,14 @@ BOOL TLInjectDll(DWORD processID, TCHAR* dllPath)
         return 0;
     }
     printf("Created remote thread\n");
-    getchar();
     // Wait for the remote thread to finish
     WaitForSingleObject(hThread, INFINITE);
     printf("Remote thread finished\n");
-    getchar();
     // Clean up resources
     CloseHandle(hThread);
     VirtualFreeEx(hProcess, remoteBuf, 0, MEM_RELEASE);
     CloseHandle(hProcess);
     printf("DLL injected successfully.\n");
-    getchar();
     return 1;
 }
 
