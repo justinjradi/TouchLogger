@@ -1,12 +1,28 @@
 // dllmain.cpp : Defines the entry point for the DLL application.
 #include "pch.h"
 #include "TouchLoggerDefs.h"
+#include <string>
+
 
 HHOOK hHook = NULL;
 HINSTANCE hInstance = NULL;
 HANDLE hOutPipe = INVALID_HANDLE_VALUE;
 HANDLE hInPipe = INVALID_HANDLE_VALUE;
 DWORD threadID = 0;
+
+void output_dword(DWORD x)
+{
+    if (sizeof(unsigned int) != sizeof(DWORD))
+    {
+        return;
+    }
+    char str[16];
+    sprintf_s(str, "%u", (unsigned int)x);
+    wchar_t wstr[16];
+    size_t length = NULL;
+    mbstowcs_s(&length, wstr, 16, str, _TRUNCATE);
+    OutputDebugString((LPCWSTR)wstr);
+}
 
 HANDLE TLConnectOutPipe(void)
 {
@@ -23,7 +39,9 @@ HANDLE TLConnectOutPipe(void)
     );
     if (hPipe == NULL || hPipe == INVALID_HANDLE_VALUE)
     {
-        OutputDebugString(L"Failed to connect out pipe to server\n");
+        OutputDebugString(L"Failed to connect out pipe to server, error code: ");
+        output_dword(GetLastError());
+        OutputDebugString(L"\n");
         return INVALID_HANDLE_VALUE;
     }
     OutputDebugString(L"Connected out pipe to server\n");
@@ -45,10 +63,12 @@ HANDLE TLConnectInPipe(void)
     );
     if (hPipe == NULL || hPipe == INVALID_HANDLE_VALUE)
     {
-        OutputDebugString(L"Failed to connect out pipe to server\n");
+        OutputDebugString(L"Failed to connect in pipe to server, error code: ");
+        output_dword(GetLastError());
+        OutputDebugString(L"\n");
         return INVALID_HANDLE_VALUE;
     }
-    OutputDebugString(L"Connected out pipe to server\n");
+    OutputDebugString(L"Connected in pipe to server\n");
     return hPipe;
 }
 
@@ -108,13 +128,6 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpReserved) {
             OutputDebugString(L"Thread ID of 0 is invalid\n");
             break;
         }
-        hInPipe = TLConnectInPipe();
-        if (hInPipe == NULL || hInPipe == INVALID_HANDLE_VALUE)
-        {
-            OutputDebugString(L"Couldn't connect to in pipe\n");
-            break;
-        }
-        OutputDebugString(L"Connected to in pipe\n");
         hInstance = hinstDLL;
         if (CreateThread(NULL, 0, ThreadProc, NULL, 0, NULL) == NULL)
         {

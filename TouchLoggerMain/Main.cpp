@@ -125,8 +125,8 @@ void TLConnectPipe(HANDLE hPipe)
 
 void MyThreadFunc(HANDLE hOutPipe, HANDLE hInPipe, DWORD threadID)
 {
-    TLConnectPipe(hInPipe);
     TLConnectPipe(hOutPipe);
+    TLConnectPipe(hInPipe);
     while (!(WriteFile(hOutPipe, &threadID, TL_OUT_MSG_SIZE, NULL, NULL)));
     printf("Sent thread ID to Dll\n");
 }
