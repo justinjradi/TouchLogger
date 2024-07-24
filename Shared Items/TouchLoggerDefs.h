@@ -17,3 +17,5 @@ typedef struct
 #define TL_OUT_BUFFER_SIZE		16
 #define TL_IN_MSG_SIZE			sizeof(TLTouchMessage)
 #define TL_IN_BUFFER_SIZE		16
+
+//C:\Users\Justin\Documents\GitHub\TouchLogger\x64\Debug

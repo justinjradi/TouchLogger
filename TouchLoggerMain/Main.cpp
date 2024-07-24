@@ -4,6 +4,7 @@
 #include <iostream>
 #include <stdlib.h>
 #include <shlwapi.h>
+#include <thread>
 
 BOOL TLInjectDll(DWORD processID, char* dllPath)
 {
@@ -111,7 +112,7 @@ HANDLE TLCreateInPipe(void)
     return hPipe;
 }
 
-void TLConnectServer(HANDLE hPipe)
+void TLConnectPipe(HANDLE hPipe)
 {
     printf("Waiting for cilent to connect\n");
     if (!ConnectNamedPipe(hPipe, NULL))
@@ -122,7 +123,12 @@ void TLConnectServer(HANDLE hPipe)
     printf("Connected server\n");
 }
 
-
+void TLSendThreadID(HANDLE outPipe, DWORD threadID)
+{
+    TLConnectPipe(outPipe);
+    while (!(WriteFile(outPipe, &threadID, TL_OUT_MSG_SIZE, NULL, NULL)));
+    printf("Sent thread ID to Dll\n");
+}
 
 // User provides process ID and thread ID in hex (no prefix) as command-line arguments 
 int main(int argc, char* argv[])
@@ -134,10 +140,9 @@ int main(int argc, char* argv[])
     PathRemoveFileSpecA(dllPath);
     PathAppendA(dllPath, TL_DLL_NAME);
     printf("%s\n", dllPath);
-    TLInjectDll(processID, dllPath);
     HANDLE outPipe = TLCreateOutPipe();
-    TLConnectServer(outPipe);
-    while (!(WriteFile(outPipe, &threadID, TL_OUT_MSG_SIZE, NULL, NULL)));
-    printf("Sent thread ID to Dll");
+    std::thread sendThreadIDThread(TLSendThreadID, outPipe, threadID);
+    TLInjectDll(processID, dllPath);
+    sendThreadIDThread.join();
     return 0;
 }

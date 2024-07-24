@@ -5,6 +5,7 @@
 HHOOK hHook = NULL;
 HINSTANCE hInstance = NULL;
 HANDLE hPipe = INVALID_HANDLE_VALUE;
+DWORD threadID = 0;
 
 HANDLE TLConnectOutPipe(void)
 {
@@ -57,15 +58,28 @@ LRESULT CALLBACK HookProc(int nCode, WPARAM wParam, LPARAM lParam)
         CWPSTRUCT* pCwp = (CWPSTRUCT*)lParam;
         if (pCwp->message == WM_TOUCH)
         {
-            unsigned int numInputs = pCwp->lParam;
-            TOUCHINPUT* ti = new TOUCHINPUT[numInputs];
-            if (hPipe != INVALID_HANDLE_VALUE)
-            {
-                OutputDebugString(L"Detected touch message");
-            }
+            OutputDebugString(L"Hook activated\n");
         }
     }
     return CallNextHookEx(hHook, nCode, wParam, lParam);
+}
+
+DWORD WINAPI ThreadProc(LPVOID lpParam)
+{
+    OutputDebugString(L"Entered ThreadProc\n");
+    hHook = SetWindowsHookEx(WH_CALLWNDPROC, HookProc, hInstance, threadID);
+    if (hHook == NULL)
+    {
+        OutputDebugString(L"Failed to set hook");
+        return 0;
+    }
+    OutputDebugString(L"Set hook successfully\n");
+    MSG msg;
+    while (GetMessage(&msg, NULL, 0, 0)) {
+        TranslateMessage(&msg);
+        DispatchMessage(&msg);
+    }
+    return 0;
 }
 
 BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpReserved) {
@@ -74,8 +88,8 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpReserved) {
     case DLL_PROCESS_ATTACH:
         OutputDebugString(L"Attaching DLL\n");
         hPipe = TLConnectOutPipe();
+        if (hPipe == NULL || hPipe == INVALID_HANDLE_VALUE) break;
         OutputDebugString(L"Connected to out pipe\n");
-        DWORD threadID = 0;
         while ((!ReadFile(hPipe, &threadID, TL_OUT_MSG_SIZE, NULL, NULL)));
         OutputDebugString(L"Received thread ID\n");
         if (threadID == 0)
@@ -84,13 +98,20 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpReserved) {
             break;
         }
         hInstance = hinstDLL;
-        hHook = SetWindowsHookEx(WH_CALLWNDPROC, HookProc, hInstance, threadID);
-        if (hHook == NULL)
+        //hHook = SetWindowsHookEx(WH_CALLWNDPROC, HookProc, hInstance, threadID);
+        //if (hHook == NULL)
+        //{
+        //    OutputDebugString(L"Failed to set hook");
+        //    break;
+        //}
+        //OutputDebugString(L"Set hook successfully\n");
+        if (CreateThread(NULL, 0, ThreadProc, NULL, 0, NULL) == NULL)
         {
-            OutputDebugString(L"Failed to set hook");
+            OutputDebugString(L"Failed to create ThreadProc\n");
             break;
         }
-        OutputDebugString(L"Set hook successfully\n");
+        OutputDebugString(L"Created ThreadProc\n");
+        break;
 
     case DLL_PROCESS_DETACH:
         OutputDebugString(L"Detaching DLL\n");
@@ -107,6 +128,9 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpReserved) {
         }
         hHook = NULL;
         OutputDebugString(L"Unhooked successfully\n");
+
+
+        if (lpReserved == NULL) OutputDebugString(L"Welp\n");
         break;
     }
     return TRUE;
