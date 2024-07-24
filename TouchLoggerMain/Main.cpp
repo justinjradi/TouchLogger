@@ -123,10 +123,11 @@ void TLConnectPipe(HANDLE hPipe)
     printf("Connected server\n");
 }
 
-void TLSendThreadID(HANDLE outPipe, DWORD threadID)
+void MyThreadFunc(HANDLE hOutPipe, HANDLE hInPipe, DWORD threadID)
 {
-    TLConnectPipe(outPipe);
-    while (!(WriteFile(outPipe, &threadID, TL_OUT_MSG_SIZE, NULL, NULL)));
+    TLConnectPipe(hInPipe);
+    TLConnectPipe(hOutPipe);
+    while (!(WriteFile(hOutPipe, &threadID, TL_OUT_MSG_SIZE, NULL, NULL)));
     printf("Sent thread ID to Dll\n");
 }
 
@@ -140,9 +141,16 @@ int main(int argc, char* argv[])
     PathRemoveFileSpecA(dllPath);
     PathAppendA(dllPath, TL_DLL_NAME);
     printf("%s\n", dllPath);
-    HANDLE outPipe = TLCreateOutPipe();
-    std::thread sendThreadIDThread(TLSendThreadID, outPipe, threadID);
+    HANDLE hOutPipe = TLCreateOutPipe();
+    HANDLE hInPipe = TLCreateInPipe();
+    std::thread myThreadObj(MyThreadFunc, hOutPipe, hInPipe, threadID);
     TLInjectDll(processID, dllPath);
-    sendThreadIDThread.join();
+    myThreadObj.join();
+    TLTouchMessage touchMessage = { 0 };
+    while (1)
+    {
+        while (!(ReadFile(hInPipe, &touchMessage, TL_IN_MSG_SIZE, NULL, NULL)));
+        printf("Received WM_TOUCH message with %u contacts\n", static_cast<unsigned int>(touchMessage.cInputs));
+    }
     return 0;
 }

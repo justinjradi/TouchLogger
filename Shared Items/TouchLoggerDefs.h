@@ -4,7 +4,6 @@
 
 typedef struct
 {
-    HTOUCHINPUT hTouchInput;
     UINT cInputs;
     PTOUCHINPUT pInputs;
 } TLTouchMessage;

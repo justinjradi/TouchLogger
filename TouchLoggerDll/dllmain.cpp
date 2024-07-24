@@ -4,7 +4,8 @@
 
 HHOOK hHook = NULL;
 HINSTANCE hInstance = NULL;
-HANDLE hPipe = INVALID_HANDLE_VALUE;
+HANDLE hOutPipe = INVALID_HANDLE_VALUE;
+HANDLE hInPipe = INVALID_HANDLE_VALUE;
 DWORD threadID = 0;
 
 HANDLE TLConnectOutPipe(void)
@@ -59,6 +60,15 @@ LRESULT CALLBACK HookProc(int nCode, WPARAM wParam, LPARAM lParam)
         if (pCwp->message == WM_TOUCH)
         {
             OutputDebugString(L"Hook activated\n");
+            unsigned int numInputs = static_cast<unsigned int>(pCwp->lParam);
+            TOUCHINPUT* ti = new TOUCHINPUT[numInputs];
+            if (!GetTouchInputInfo((HTOUCHINPUT)pCwp->lParam, numInputs, ti, sizeof(TOUCHINPUT)))
+            {
+                OutputDebugString(L"Unable to get touch input info\n");
+                return CallNextHookEx(hHook, nCode, wParam, lParam);
+            }
+            TLTouchMessage touchMessage = { numInputs, ti };
+            while ((!WriteFile(hInPipe, &touchMessage, TL_IN_MSG_SIZE, NULL, NULL)));
         }
     }
     return CallNextHookEx(hHook, nCode, wParam, lParam);
@@ -87,24 +97,25 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpReserved) {
     {
     case DLL_PROCESS_ATTACH:
         OutputDebugString(L"Attaching DLL\n");
-        hPipe = TLConnectOutPipe();
-        if (hPipe == NULL || hPipe == INVALID_HANDLE_VALUE) break;
-        OutputDebugString(L"Connected to out pipe\n");
-        while ((!ReadFile(hPipe, &threadID, TL_OUT_MSG_SIZE, NULL, NULL)));
+        hOutPipe = TLConnectOutPipe();
+        if (hOutPipe == NULL || hOutPipe == INVALID_HANDLE_VALUE) break;
+        hInPipe = TLConnectInPipe();
+        if (hInPipe == NULL || hInPipe == INVALID_HANDLE_VALUE) break;
+        while ((!ReadFile(hOutPipe, &threadID, TL_OUT_MSG_SIZE, NULL, NULL)));
         OutputDebugString(L"Received thread ID\n");
         if (threadID == 0)
         {
             OutputDebugString(L"Thread ID of 0 is invalid\n");
             break;
         }
+        hInPipe = TLConnectInPipe();
+        if (hInPipe == NULL || hInPipe == INVALID_HANDLE_VALUE)
+        {
+            OutputDebugString(L"Couldn't connect to in pipe\n");
+            break;
+        }
+        OutputDebugString(L"Connected to in pipe\n");
         hInstance = hinstDLL;
-        //hHook = SetWindowsHookEx(WH_CALLWNDPROC, HookProc, hInstance, threadID);
-        //if (hHook == NULL)
-        //{
-        //    OutputDebugString(L"Failed to set hook");
-        //    break;
-        //}
-        //OutputDebugString(L"Set hook successfully\n");
         if (CreateThread(NULL, 0, ThreadProc, NULL, 0, NULL) == NULL)
         {
             OutputDebugString(L"Failed to create ThreadProc\n");
