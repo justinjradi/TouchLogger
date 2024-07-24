@@ -1,5 +1,4 @@
 #pragma comment(lib, "Shlwapi.lib")
-#include "Windows.h"
 #include "TouchLoggerDefs.h"
 #include <stdio.h>
 #include <iostream>
@@ -60,14 +59,7 @@ BOOL TLInjectDll(DWORD processID, char* dllPath)
         CloseHandle(hProcess);
         return 0;
     }
-    //printf("Injected thread ID = %lu\n", static_cast<unsigned long>(injectedThreadID));
-    //getchar();
-    // Wait for the remote thread to finish
     WaitForSingleObject(hThread, INFINITE);
-    //DWORD exitCode;
-    //GetExitCodeThread(hThread, &exitCode);
-    //printf("Exited remote thread. Exit code = %x\n", static_cast<unsigned long>(exitCode));
-    // Clean up resources
     CloseHandle(hThread);
     VirtualFreeEx(hProcess, remoteBuf, 0, MEM_RELEASE);
     CloseHandle(hProcess);
@@ -75,24 +67,47 @@ BOOL TLInjectDll(DWORD processID, char* dllPath)
     return 1;
 }
 
-HANDLE TLCreatePipe(void)
+HANDLE TLCreateOutPipe(void)
+{
+    HANDLE hPipe = CreateNamedPipe(
+        TL_OUT_PIPE_NAME,
+        PIPE_ACCESS_OUTBOUND,
+        PIPE_TYPE_MESSAGE | PIPE_READMODE_MESSAGE | PIPE_WAIT,
+        1,
+        TL_OUT_MSG_SIZE * TL_OUT_BUFFER_SIZE,
+        0,
+        NMPWAIT_USE_DEFAULT_WAIT,
+        NULL
+    );
+    if (hPipe == NULL || hPipe == INVALID_HANDLE_VALUE)
+    {
+        unsigned long error = static_cast<unsigned long>(GetLastError());
+        printf("Failed to create pipe; Error code = %lu\n", error);
+        return NULL;
+    }
+    printf("Created out pipe\n");
+    return hPipe;
+}
+
+HANDLE TLCreateInPipe(void)
 {
     HANDLE hPipe = CreateNamedPipe(
         TL_IN_PIPE_NAME,
-        PIPE_ACCESS_INBOUND/*PIPE_ACCESS_DUPLEX*/,
-        PIPE_TYPE_MESSAGE | PIPE_READMODE_MESSAGE,
+        PIPE_ACCESS_INBOUND,
+        PIPE_TYPE_MESSAGE | PIPE_READMODE_MESSAGE | PIPE_WAIT,
         1,
-        TL_IN_MSG_SIZE * TL_IN_BUFFER_SIZE,
+        0,
         TL_IN_MSG_SIZE * TL_IN_BUFFER_SIZE,
         NMPWAIT_USE_DEFAULT_WAIT,
         NULL
     );
     if (hPipe == NULL || hPipe == INVALID_HANDLE_VALUE)
     {
-        printf("Failed to create pipe; Error code = %lu\n", static_cast<unsigned long>(GetLastError()));
+        unsigned long error = static_cast<unsigned long>(GetLastError());
+        printf("Failed to create pipe; Error code = %lu\n", error);
         return NULL;
     }
-    printf("Created named pipe\n");
+    printf("Created in pipe\n");
     return hPipe;
 }
 
@@ -107,19 +122,7 @@ void TLConnectServer(HANDLE hPipe)
     printf("Connected server\n");
 }
 
-unsigned char TLGetData(HANDLE hPipe)
-{
-    unsigned char data[1] = { 0 };
-    DWORD numberOfBytesRead = 0;
-    printf("Waiting for data to arrive\n");
-    if (!ReadFile(hPipe, data, TL_IN_MSG_SIZE, &numberOfBytesRead, NULL))
-    {
-        printf("Failed to read message; Error code = %lu\n", static_cast<unsigned long>(GetLastError()));
-        return 0;
-    }
-    printf("Received data\n");
-    return data[0];
-}
+
 
 // User provides process ID and thread ID in hex (no prefix) as command-line arguments 
 int main(int argc, char* argv[])
@@ -132,5 +135,9 @@ int main(int argc, char* argv[])
     PathAppendA(dllPath, TL_DLL_NAME);
     printf("%s\n", dllPath);
     TLInjectDll(processID, dllPath);
+    HANDLE outPipe = TLCreateOutPipe();
+    TLConnectServer(outPipe);
+    while (!(WriteFile(outPipe, &threadID, TL_OUT_MSG_SIZE, NULL, NULL)));
+    printf("Sent thread ID to Dll");
     return 0;
 }
