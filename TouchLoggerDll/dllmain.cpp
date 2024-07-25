@@ -23,7 +23,7 @@ void output_dword(DWORD x)
     OutputDebugString((LPCWSTR)wstr);
 }
 
-int TLConnectClient(HANDLE hPipe)
+int TLConnectClient(void)
 {
     hPipe = CreateFile
     (
@@ -89,49 +89,56 @@ DWORD WINAPI ThreadProc(LPVOID lpParam)
 BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpReserved) {
     switch (fdwReason)
     {
-    case DLL_PROCESS_ATTACH:
-        OutputDebugString(L"Attaching DLL\n");
-        if (!TLConnectClient(hPipe))
+        case DLL_PROCESS_ATTACH:
         {
+            OutputDebugString(L"Attaching DLL\n");
+            if (!TLConnectClient())
+            {
+                break;
+            }
+            DWORD data[2] = { 0 };
+            OutputDebugString(L"Trying to read setup data...\n");
+            if (!ReadFile(hPipe, data, TL_MSG_SIZE, NULL, NULL))
+            {
+                OutputDebugString(L"Setup read failed, Error Code = ");
+                output_dword(GetLastError());
+                OutputDebugString(L"\n");
+                break;
+            }
+            OutputDebugString(L"Setup read successful\n");
+            threadID = data[1];
+            if (threadID == 0)
+            {
+                OutputDebugString(L"Thread ID of 0 is invalid\n");
+                break;
+            }
+            hInstance = hinstDLL;
+            if (CreateThread(NULL, 0, ThreadProc, NULL, 0, NULL) == NULL)
+            {
+                OutputDebugString(L"Failed to create ThreadProc\n");
+                break;
+            }
+            OutputDebugString(L"Created ThreadProc\n");
             break;
         }
-        DWORD data[2] = { 0 };
-        if (!ReadFile(hPipe, data, TL_MSG_SIZE, NULL, NULL))
+        case DLL_PROCESS_DETACH:
         {
-            OutputDebugString(L"Setup read failed\n");
-        }
-        OutputDebugString(L"Setup read successful\n");
-        threadID = data[1];
-        if (threadID == 0)
-        {
-            OutputDebugString(L"Thread ID of 0 is invalid\n");
+            OutputDebugString(L"Detaching DLL\n");
+            if (hHook == NULL)
+            {
+                OutputDebugString(L"Unable to unhook NULL HHOOK\n");
+                break;
+            }
+            BOOL unhook_result = UnhookWindowsHookEx(hHook);
+            if (unhook_result == 0)
+            {
+                OutputDebugString(L"Tried to unhook but failed\n");
+                break;
+            }
+            hHook = NULL;
+            OutputDebugString(L"Unhooked successfully\n");
             break;
         }
-        hInstance = hinstDLL;
-        if (CreateThread(NULL, 0, ThreadProc, NULL, 0, NULL) == NULL)
-        {
-            OutputDebugString(L"Failed to create ThreadProc\n");
-            break;
-        }
-        OutputDebugString(L"Created ThreadProc\n");
-        break;
-
-    case DLL_PROCESS_DETACH:
-        OutputDebugString(L"Detaching DLL\n");
-        if (hHook == NULL)
-        {
-            OutputDebugString(L"Unable to unhook NULL HHOOK\n");
-            break;
-        }
-        BOOL unhook_result = UnhookWindowsHookEx(hHook);
-        if (unhook_result == 0)
-        {
-            OutputDebugString(L"Tried to unhook but failed\n");
-            break;
-        }
-        hHook = NULL;
-        OutputDebugString(L"Unhooked successfully\n");
-        break;
     }
     return TRUE;
 }

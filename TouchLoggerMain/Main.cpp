@@ -68,7 +68,7 @@ BOOL TLInjectDll(DWORD processID)
     return 1;
 }
 
-int TLSetupPipe(HANDLE hPipe, DWORD threadID)
+void TLSetupPipe(HANDLE hPipe, DWORD threadID)
 {
     // Create pipe
     hPipe = CreateNamedPipe(
@@ -85,26 +85,25 @@ int TLSetupPipe(HANDLE hPipe, DWORD threadID)
     {
         unsigned long error = static_cast<unsigned long>(GetLastError());
         printf("Failed to create pipe; Error code = %lu\n", error);
-        return 0;
+        return;
     }
-    TLDebug("Created pipe\n");
+    printf("Created pipe\n");
     // Connect pipe
-    TLDebug("Waiting for cilent to connect\n");
+    printf("Waiting for cilent to connect...\n");
     if (!ConnectNamedPipe(hPipe, NULL))
     {
         printf("Failed to connect pipe; Error code = %lu\n", static_cast<unsigned long>(GetLastError()));
-        return 0;
+        return;
     }
-    TLDebug("Connected pipe\n");;
+    printf("Connected pipe\n");;
     // Send thread ID to dll
-    DWORD data[2] = { TL_STATE_RUN, threadID };
+    DWORD data[2] = {TL_STATE_RUN, threadID};
     if (!WriteFile(hPipe, data, TL_MSG_SIZE, NULL, NULL))
     {
         printf("Failed to send thread ID; Error code = %lu\n", static_cast<unsigned long>(GetLastError()));
-        return 0;
+        return;
     }
-    TLDebug("Sent thread ID");
-    return 1;
+    printf("Sent thread ID\n");
 }
 
 int main(int argc, char* argv[])
@@ -121,7 +120,7 @@ int main(int argc, char* argv[])
     printf("Successfully started logging. Press ENTER to stop\n");
     getchar();
     //DWORD data[2] = { TL_STATE_EXIT, threadID };
-    //if (!WriteFile(hPipe, data, TL_MSG_SIZE, NULL, NULL))
+    //if (!WriteFile(hPipe, &data, TL_MSG_SIZE, NULL, NULL))
     //{
     //    printf("Failed to send exit command; Error code = %lu\n", static_cast<unsigned long>(GetLastError()));
     //    return 0;
