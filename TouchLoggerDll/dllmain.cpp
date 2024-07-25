@@ -6,8 +6,7 @@
 
 HHOOK hHook = NULL;
 HINSTANCE hInstance = NULL;
-HANDLE hOutPipe = INVALID_HANDLE_VALUE;
-HANDLE hInPipe = INVALID_HANDLE_VALUE;
+HANDLE hPipe = INVALID_HANDLE_VALUE;
 DWORD threadID = 0;
 
 void output_dword(DWORD x)
@@ -24,12 +23,11 @@ void output_dword(DWORD x)
     OutputDebugString((LPCWSTR)wstr);
 }
 
-HANDLE TLConnectOutPipe(void)
+int TLConnectClient(HANDLE hPipe)
 {
-    HANDLE hPipe = INVALID_HANDLE_VALUE;
     hPipe = CreateFile
     (
-        TL_OUT_PIPE_NAME,
+        TL_PIPE_NAME,
         GENERIC_READ,
         FILE_SHARE_READ | FILE_SHARE_WRITE,
         NULL,
@@ -39,37 +37,13 @@ HANDLE TLConnectOutPipe(void)
     );
     if (hPipe == NULL || hPipe == INVALID_HANDLE_VALUE)
     {
-        OutputDebugString(L"Failed to connect out pipe to server, error code: ");
+        OutputDebugString(L"Failed to connect pipe to client, error code: ");
         output_dword(GetLastError());
         OutputDebugString(L"\n");
-        return INVALID_HANDLE_VALUE;
+        return 0;
     }
-    OutputDebugString(L"Connected out pipe to server\n");
-    return hPipe;
-}
-
-HANDLE TLConnectInPipe(void)
-{
-    HANDLE hPipe = INVALID_HANDLE_VALUE;
-    hPipe = CreateFile
-    (
-        TL_IN_PIPE_NAME,
-        GENERIC_WRITE,
-        FILE_SHARE_READ | FILE_SHARE_WRITE,
-        NULL,
-        OPEN_EXISTING,
-        FILE_ATTRIBUTE_NORMAL,
-        NULL
-    );
-    if (hPipe == NULL || hPipe == INVALID_HANDLE_VALUE)
-    {
-        OutputDebugString(L"Failed to connect in pipe to server, error code: ");
-        output_dword(GetLastError());
-        OutputDebugString(L"\n");
-        return INVALID_HANDLE_VALUE;
-    }
-    OutputDebugString(L"Connected in pipe to server\n");
-    return hPipe;
+    OutputDebugString(L"Connected pipe to client\n");
+    return 1;
 }
 
 LRESULT CALLBACK HookProc(int nCode, WPARAM wParam, LPARAM lParam)
@@ -87,8 +61,7 @@ LRESULT CALLBACK HookProc(int nCode, WPARAM wParam, LPARAM lParam)
                 OutputDebugString(L"Unable to get touch input info\n");
                 return CallNextHookEx(hHook, nCode, wParam, lParam);
             }
-            TLTouchMessage touchMessage = { numInputs, ti };
-            while ((!WriteFile(hInPipe, &touchMessage, TL_IN_MSG_SIZE, NULL, NULL)));
+            // write to file
         }
     }
     return CallNextHookEx(hHook, nCode, wParam, lParam);
@@ -108,6 +81,7 @@ DWORD WINAPI ThreadProc(LPVOID lpParam)
     while (GetMessage(&msg, NULL, 0, 0)) {
         TranslateMessage(&msg);
         DispatchMessage(&msg);
+        OutputDebugString(L"Haiii ^_^\n");
     }
     return 0;
 }
@@ -117,12 +91,17 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpReserved) {
     {
     case DLL_PROCESS_ATTACH:
         OutputDebugString(L"Attaching DLL\n");
-        hOutPipe = TLConnectOutPipe();
-        if (hOutPipe == NULL || hOutPipe == INVALID_HANDLE_VALUE) break;
-        hInPipe = TLConnectInPipe();
-        if (hInPipe == NULL || hInPipe == INVALID_HANDLE_VALUE) break;
-        while ((!ReadFile(hOutPipe, &threadID, TL_OUT_MSG_SIZE, NULL, NULL)));
-        OutputDebugString(L"Received thread ID\n");
+        if (!TLConnectClient(hPipe))
+        {
+            break;
+        }
+        DWORD data[2] = { 0 };
+        if (!ReadFile(hPipe, data, TL_MSG_SIZE, NULL, NULL))
+        {
+            OutputDebugString(L"Setup read failed\n");
+        }
+        OutputDebugString(L"Setup read successful\n");
+        threadID = data[1];
         if (threadID == 0)
         {
             OutputDebugString(L"Thread ID of 0 is invalid\n");
@@ -152,9 +131,6 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpReserved) {
         }
         hHook = NULL;
         OutputDebugString(L"Unhooked successfully\n");
-
-
-        if (lpReserved == NULL) OutputDebugString(L"Welp\n");
         break;
     }
     return TRUE;
