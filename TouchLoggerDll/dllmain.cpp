@@ -81,7 +81,6 @@ DWORD WINAPI ThreadProc(LPVOID lpParam)
     while (GetMessage(&msg, NULL, 0, 0)) {
         TranslateMessage(&msg);
         DispatchMessage(&msg);
-        OutputDebugString(L"Haiii ^_^\n");
     }
     return 0;
 }

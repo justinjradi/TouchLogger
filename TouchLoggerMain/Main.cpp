@@ -6,7 +6,7 @@
 #include <shlwapi.h>
 #include <thread>
 
-BOOL TLInjectDll(DWORD processID)
+BOOL TLLoadDll(DWORD processID, HANDLE hProcess, LPVOID remoteBuf, HMODULE hKernel32)
 {
     // Get Dll path
     char dllPath[MAX_PATH];
@@ -14,14 +14,14 @@ BOOL TLInjectDll(DWORD processID)
     PathRemoveFileSpecA(dllPath);
     PathAppendA(dllPath, TL_DLL_NAME);
     // Open target process
-    HANDLE hProcess = OpenProcess(PROCESS_ALL_ACCESS, FALSE, processID);
+    hProcess = OpenProcess(PROCESS_ALL_ACCESS, FALSE, processID);
     if (hProcess == NULL)
     {
         printf("Unable to open target process. Error code = %lu\n", static_cast<unsigned long>(GetLastError()));
         return 0;
     }
     // Allocate memory for dll path in target process
-    LPVOID remoteBuf = VirtualAllocEx(hProcess, NULL, strlen(dllPath) + 1, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+    remoteBuf = VirtualAllocEx(hProcess, NULL, strlen(dllPath) + 1, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
     if (remoteBuf == NULL)
     {
         printf("Could not allocate memory in target process. Error code = %lu\n", static_cast<unsigned long>(GetLastError()));
@@ -36,7 +36,7 @@ BOOL TLInjectDll(DWORD processID)
         return 0;
     }
     // Load kernel32.dll in current process
-    HMODULE hKernel32 = GetModuleHandle(_T("Kernel32"));
+    hKernel32 = GetModuleHandle(_T("Kernel32"));
     if (hKernel32 == NULL) {
         printf("Failed to load kernel32.dll. Error code = %lu\n", static_cast<unsigned long>(GetLastError()));
         VirtualFreeEx(hProcess, remoteBuf, 0, MEM_RELEASE);
@@ -52,8 +52,28 @@ BOOL TLInjectDll(DWORD processID)
         return 0;
     }
     // Create a remote thread in the target process to execute LoadLibrary
-    DWORD injectedThreadID = 0;
-    HANDLE hThread = CreateRemoteThread(hProcess, NULL, 0, (LPTHREAD_START_ROUTINE)loadLibAddr, remoteBuf, 0, &injectedThreadID);
+    HANDLE hThread = CreateRemoteThread(hProcess, NULL, 0, (LPTHREAD_START_ROUTINE)loadLibAddr, remoteBuf, 0, NULL);
+    if (hThread == NULL) {
+        printf("Could not create remote thread. Error code = %lu\n", static_cast<unsigned long>(GetLastError()));
+        VirtualFreeEx(hProcess, remoteBuf, 0, MEM_RELEASE);
+        CloseHandle(hProcess);
+        return 0;
+    }
+    return 1;
+}
+
+int TLUnloadDll(HANDLE hProcess, LPVOID remoteBuf, HMODULE hKernel32)
+{
+    // Get address of LoadLibrary from kernel32.dll
+    FARPROC freeLibAddr = GetProcAddress(hKernel32, "FreeLibraryA");
+    if (freeLibAddr == NULL) {
+        printf("Could not find FreeLibrary function. Error code = %lu\n", static_cast<unsigned long>(GetLastError()));
+        VirtualFreeEx(hProcess, remoteBuf, 0, MEM_RELEASE);
+        CloseHandle(hProcess);
+        return 0;
+    }
+    // Create a remote thread in the target process to execute FreeLibrary
+    HANDLE hThread = CreateRemoteThread(hProcess, NULL, 0, (LPTHREAD_START_ROUTINE)freeLibAddr, remoteBuf, 0, NULL);
     if (hThread == NULL) {
         printf("Could not create remote thread. Error code = %lu\n", static_cast<unsigned long>(GetLastError()));
         VirtualFreeEx(hProcess, remoteBuf, 0, MEM_RELEASE);
@@ -65,7 +85,7 @@ BOOL TLInjectDll(DWORD processID)
     CloseHandle(hThread);
     VirtualFreeEx(hProcess, remoteBuf, 0, MEM_RELEASE);
     CloseHandle(hProcess);
-    return 1;
+    printf("Unloaded dll\n");
 }
 
 void TLSetupPipe(HANDLE hPipe, DWORD threadID)
@@ -112,13 +132,20 @@ int main(int argc, char* argv[])
     DWORD threadID = static_cast<DWORD>(std::strtoul(argv[2], nullptr, 16));
     HANDLE hPipe = INVALID_HANDLE_VALUE;
     std::thread setupPipeThread(TLSetupPipe, hPipe, threadID);
-    if (!TLInjectDll(processID))
+    HANDLE hProcess = NULL;
+    LPVOID remoteBuf = NULL;
+    HMODULE hKernel32 = NULL;
+    if (!TLLoadDll(processID, hProcess, remoteBuf, hKernel32))
     {
         return 1;
     }
     setupPipeThread.join();
     printf("Successfully started logging. Press ENTER to stop\n");
     getchar();
+    if (!TLUnloadDll(hProcess, remoteBuf, hKernel32))
+    {
+        return 1;
+    }
     //DWORD data[2] = { TL_STATE_EXIT, threadID };
     //if (!WriteFile(hPipe, &data, TL_MSG_SIZE, NULL, NULL))
     //{
