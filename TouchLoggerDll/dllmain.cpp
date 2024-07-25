@@ -1,13 +1,14 @@
-// dllmain.cpp : Defines the entry point for the DLL application.
 #include "pch.h"
 #include "TouchLoggerDefs.h"
 #include <string>
-
+#include <fstream>
+#include <stdio.h>
 
 HHOOK hHook = NULL;
 HINSTANCE hInstance = NULL;
 HANDLE hPipe = INVALID_HANDLE_VALUE;
 DWORD threadID = 0;
+std::string log = "";
 
 void output_dword(DWORD x)
 {
@@ -61,7 +62,7 @@ LRESULT CALLBACK HookProc(int nCode, WPARAM wParam, LPARAM lParam)
                 OutputDebugString(L"Unable to get touch input info\n");
                 return CallNextHookEx(hHook, nCode, wParam, lParam);
             }
-            // write to file
+            // add to log
         }
     }
     return CallNextHookEx(hHook, nCode, wParam, lParam);
@@ -77,10 +78,24 @@ DWORD WINAPI ThreadProc(LPVOID lpParam)
         return 0;
     }
     OutputDebugString(L"Set hook successfully\n");
-    MSG msg;
-    while (GetMessage(&msg, NULL, 0, 0)) {
-        TranslateMessage(&msg);
-        DispatchMessage(&msg);
+    while (1)
+    {
+       DWORD data[2] = { 0 };
+       BOOL readStatus = 0;
+       readStatus = ReadFile(hPipe, data, TL_MSG_SIZE, NULL, NULL);
+       if (readStatus && (data[0] == TL_STATE_EXIT))
+       {
+           OutputDebugString(L"Preparing log file...\n");
+           std::ofstream file(TL_FILE_NAME);
+           if (file.is_open()) {
+               file << str;
+               file.close();
+           }
+           else {
+               OutputDebugString(L"Unable to open file\n");
+           }
+           OutputDebugString(L"Succesfully wrote to file\n");
+       }
     }
     return 0;
 }
@@ -111,6 +126,7 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpReserved) {
                 OutputDebugString(L"Thread ID of 0 is invalid\n");
                 break;
             }
+            //hFile = fopen(TL_FILE_NAME, "w");
             hInstance = hinstDLL;
             if (CreateThread(NULL, 0, ThreadProc, NULL, 0, NULL) == NULL)
             {
