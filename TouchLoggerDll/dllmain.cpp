@@ -3,12 +3,20 @@
 #include <string>
 #include <fstream>
 #include <stdio.h>
+#include <vector>
+
+typedef struct
+{
+    UINT cInputs;
+    PTOUCHINPUT pInputs;
+    DWORD timestamp;
+} TLLogEntry;
 
 HHOOK hHook = NULL;
 HINSTANCE hInstance = NULL;
 HANDLE hPipe = INVALID_HANDLE_VALUE;
 DWORD threadID = 0;
-std::string log = "";
+std::vector<TLLogEntry> log;
 
 void output_dword(DWORD x)
 {
@@ -22,6 +30,40 @@ void output_dword(DWORD x)
     size_t length = NULL;
     mbstowcs_s(&length, wstr, 16, str, _TRUNCATE);
     OutputDebugString((LPCWSTR)wstr);
+}
+
+void TLEventType(const char* str, DWORD dwFlags)
+{
+    switch (dwFlags)
+    {
+        case 0x0001:
+            str = "MOVE";
+            break;
+        case 0x0002:
+            str = "DOWN";
+            break;
+        case 0x0004:
+            str = "UP";
+            break;
+        case 0x0008:
+            str = "INRANGE";
+            break;
+        case 0x0010:
+            str = "PRIMARY";
+            break;
+        case 0x0020:
+            str = "NOCOALESCE";
+            break;
+        case 0x0040:
+            str = "PEN";
+            break;
+        case 0x0080:
+            str = "PALM";
+            break;
+        default:
+            str = "N/A";
+            break;
+    }
 }
 
 int TLConnectClient(void)
@@ -54,15 +96,15 @@ LRESULT CALLBACK HookProc(int nCode, WPARAM wParam, LPARAM lParam)
         CWPSTRUCT* pCwp = (CWPSTRUCT*)lParam;
         if (pCwp->message == WM_TOUCH)
         {
-            OutputDebugString(L"Hook activated\n");
-            unsigned int numInputs = static_cast<unsigned int>(pCwp->lParam);
-            TOUCHINPUT* ti = new TOUCHINPUT[numInputs];
-            if (!GetTouchInputInfo((HTOUCHINPUT)pCwp->lParam, numInputs, ti, sizeof(TOUCHINPUT)))
+            UINT cInputs = (UINT)pCwp->lParam;
+            TOUCHINPUT* pInputs = new TOUCHINPUT[cInputs];
+            if (!GetTouchInputInfo((HTOUCHINPUT)pCwp->lParam, cInputs, pInputs, sizeof(TOUCHINPUT)))
             {
                 OutputDebugString(L"Unable to get touch input info\n");
                 return CallNextHookEx(hHook, nCode, wParam, lParam);
             }
-            // add to log
+            TLLogEntry tempEntry = { cInputs, pInputs, GetTickCount() };
+            log.push_back(tempEntry);
         }
     }
     return CallNextHookEx(hHook, nCode, wParam, lParam);
@@ -85,15 +127,31 @@ DWORD WINAPI ThreadProc(LPVOID lpParam)
        readStatus = ReadFile(hPipe, data, TL_MSG_SIZE, NULL, NULL);
        if (readStatus && (data[0] == TL_STATE_EXIT))
        {
+           CloseHandle(hPipe);
            OutputDebugString(L"Preparing log file...\n");
-           std::ofstream file(TL_FILE_NAME);
-           if (file.is_open()) {
-               file << str;
-               file.close();
+           FILE* file = fopen(TL_FILE_NAME, "w");
+           if (file == NULL) {
+               OutputDebugString(L"Error opening file\n");
+               return 0;
            }
-           else {
-               OutputDebugString(L"Unable to open file\n");
+           for (int i = 0; i < log.size(); i++)
+           {
+               unsigned int cInputs = (unsigned int)log[i].cInputs;
+               TOUCHINPUT* pInputs = (TOUCHINPUT*)log[i].pInputs;
+               unsigned long mTimestamp = (unsigned long)log[i].timestamp;
+               fprintf(file, "%lu ms: WM_TOUCH message with %u contacts\n", mTimestamp, cInputs);
+               for (unsigned int j = 0; j < cInputs; j++)
+               {
+                   unsigned long contactID = (unsigned long)pInputs[j].dwID;
+                   long x = (long)pInputs[j].x;
+                   long y = (long)pInputs[j].y;
+                   char eventType[32] = "NULL";
+                   TLEventType(eventType, pInputs[j].dwFlags);
+                   unsigned long scanTime = (unsigned long)pInputs[j].dwTime;
+                   fprintf(file, "  Contact ID = %lu, x = %ld, y = %ld, Event Type = %s, Scan Time = %lu\n", contactID, x, y, eventType, scanTime);
+               }
            }
+           fclose(file);
            OutputDebugString(L"Succesfully wrote to file\n");
        }
     }

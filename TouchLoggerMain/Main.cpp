@@ -19,20 +19,20 @@ BOOL TLInjectDll(DWORD processID)
     HANDLE hProcess = OpenProcess(PROCESS_ALL_ACCESS, FALSE, processID);
     if (hProcess == NULL)
     {
-        printf("Unable to open target process. Error code = %lu\n", static_cast<unsigned long>(GetLastError()));
+        printf("Unable to open target process. Error code = %lu\n", (unsigned long)GetLastError());
         return 0;
     }
     // Allocate memory for dll path in target process
     LPVOID remoteBuf = VirtualAllocEx(hProcess, NULL, strlen(dllPath) + 1, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
     if (remoteBuf == NULL)
     {
-        printf("Could not allocate memory in target process. Error code = %lu\n", static_cast<unsigned long>(GetLastError()));
+        printf("Could not allocate memory in target process. Error code = %lu\n", (unsigned long)GetLastError());
         CloseHandle(hProcess);
         return 0;
     }
     // Write DLL path to allocated memory
     if (!WriteProcessMemory(hProcess, remoteBuf, dllPath, strlen(dllPath) + 1, NULL)) {
-        printf("Could not write to process memory. Error code = %lu\n", static_cast<unsigned long>(GetLastError()));
+        printf("Could not write to process memory. Error code = %lu\n", (unsigned long)GetLastError());
         VirtualFreeEx(hProcess, remoteBuf, 0, MEM_RELEASE);
         CloseHandle(hProcess);
         return 0;
@@ -40,7 +40,7 @@ BOOL TLInjectDll(DWORD processID)
     // Load kernel32.dll in current process
     HMODULE hKernel32 = GetModuleHandle(_T("Kernel32"));
     if (hKernel32 == NULL) {
-        printf("Failed to load kernel32.dll. Error code = %lu\n", static_cast<unsigned long>(GetLastError()));
+        printf("Failed to load kernel32.dll. Error code = %lu\n", (unsigned long)GetLastError());
         VirtualFreeEx(hProcess, remoteBuf, 0, MEM_RELEASE);
         CloseHandle(hProcess);
         return 0;
@@ -48,7 +48,7 @@ BOOL TLInjectDll(DWORD processID)
     // Get address of LoadLibrary from kernel32.dll
     FARPROC loadLibAddr = GetProcAddress(hKernel32, "LoadLibraryA");
     if (loadLibAddr == NULL) {
-        printf("Could not find LoadLibrary function. Error code = %lu\n", static_cast<unsigned long>(GetLastError()));
+        printf("Could not find LoadLibrary function. Error code = %lu\n", (unsigned long)GetLastError());
         VirtualFreeEx(hProcess, remoteBuf, 0, MEM_RELEASE);
         CloseHandle(hProcess);
         return 0;
@@ -56,7 +56,7 @@ BOOL TLInjectDll(DWORD processID)
     // Create a remote thread in the target process to execute LoadLibrary
     HANDLE hThread = CreateRemoteThread(hProcess, NULL, 0, (LPTHREAD_START_ROUTINE)loadLibAddr, remoteBuf, 0, NULL);
     if (hThread == NULL) {
-        printf("Could not create remote thread. Error code = %lu\n", static_cast<unsigned long>(GetLastError()));
+        printf("Could not create remote thread. Error code = %lu\n", (unsigned long)GetLastError());
         VirtualFreeEx(hProcess, remoteBuf, 0, MEM_RELEASE);
         CloseHandle(hProcess);
         return 0;
@@ -80,20 +80,20 @@ BOOL TLEjectDll(DWORD processID)
     HANDLE hProcess = OpenProcess(PROCESS_ALL_ACCESS, FALSE, processID);
     if (hProcess == NULL)
     {
-        printf("Unable to open target process. Error code = %lu\n", static_cast<unsigned long>(GetLastError()));
+        printf("Unable to open target process. Error code = %lu\n", (unsigned long)GetLastError());
         return 0;
     }
     // Allocate memory for dll path in target process
     LPVOID remoteBuf = VirtualAllocEx(hProcess, NULL, strlen(dllPath) + 1, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
     if (remoteBuf == NULL)
     {
-        printf("Could not allocate memory in target process. Error code = %lu\n", static_cast<unsigned long>(GetLastError()));
+        printf("Could not allocate memory in target process. Error code = %lu\n", (unsigned long)GetLastError());
         CloseHandle(hProcess);
         return 0;
     }
     // Write DLL path to allocated memory
     if (!WriteProcessMemory(hProcess, remoteBuf, dllPath, strlen(dllPath) + 1, NULL)) {
-        printf("Could not write to process memory. Error code = %lu\n", static_cast<unsigned long>(GetLastError()));
+        printf("Could not write to process memory. Error code = %lu\n", (unsigned long)GetLastError());
         VirtualFreeEx(hProcess, remoteBuf, 0, MEM_RELEASE);
         CloseHandle(hProcess);
         return 0;
@@ -101,7 +101,7 @@ BOOL TLEjectDll(DWORD processID)
     // Load kernel32.dll in current process
     HMODULE hKernel32 = GetModuleHandle(_T("Kernel32"));
     if (hKernel32 == NULL) {
-        printf("Failed to load kernel32.dll. Error code = %lu\n", static_cast<unsigned long>(GetLastError()));
+        printf("Failed to load kernel32.dll. Error code = %lu\n", (unsigned long)GetLastError());
         VirtualFreeEx(hProcess, remoteBuf, 0, MEM_RELEASE);
         CloseHandle(hProcess);
         return 0;
@@ -109,7 +109,7 @@ BOOL TLEjectDll(DWORD processID)
     // Get address of FreeLibrary from kernel32.dll
     FARPROC freeLibAddr = GetProcAddress(hKernel32, "FreeLibrary");
     if (freeLibAddr == NULL) {
-        printf("Could not find FreeLibrary function. Error code = %lu\n", static_cast<unsigned long>(GetLastError()));
+        printf("Could not find FreeLibrary function. Error code = %lu\n", (unsigned long)GetLastError());
         VirtualFreeEx(hProcess, remoteBuf, 0, MEM_RELEASE);
         CloseHandle(hProcess);
         return 0;
@@ -117,7 +117,7 @@ BOOL TLEjectDll(DWORD processID)
     // Create a remote thread in the target process to execute FreeLibrary
     HANDLE hThread = CreateRemoteThread(hProcess, NULL, 0, (LPTHREAD_START_ROUTINE)freeLibAddr, remoteBuf, 0, NULL);
     if (hThread == NULL) {
-        printf("Could not create remote thread. Error code = %lu\n", static_cast<unsigned long>(GetLastError()));
+        printf("Could not create remote thread. Error code = %lu\n", (unsigned long)GetLastError());
         VirtualFreeEx(hProcess, remoteBuf, 0, MEM_RELEASE);
         CloseHandle(hProcess);
         return 0;
@@ -146,7 +146,7 @@ void TLSetupPipe(DWORD threadID)
     );
     if (hPipe == NULL || hPipe == INVALID_HANDLE_VALUE)
     {
-        unsigned long error = static_cast<unsigned long>(GetLastError());
+        unsigned long error = (unsigned long)GetLastError();
         printf("Failed to create pipe; Error code = %lu\n", error);
         return;
     }
@@ -155,7 +155,7 @@ void TLSetupPipe(DWORD threadID)
     printf("Waiting for cilent to connect...\n");
     if (!ConnectNamedPipe(hPipe, NULL))
     {
-        printf("Failed to connect pipe; Error code = %lu\n", static_cast<unsigned long>(GetLastError()));
+        printf("Failed to connect pipe; Error code = %lu\n", (unsigned long)GetLastError());
         return;
     }
     printf("Connected pipe\n");;
@@ -163,7 +163,7 @@ void TLSetupPipe(DWORD threadID)
     DWORD data[2] = {TL_STATE_RUN, threadID};
     if (!WriteFile(hPipe, data, TL_MSG_SIZE, NULL, NULL))
     {
-        printf("Failed to send thread ID; Error code = %lu\n", static_cast<unsigned long>(GetLastError()));
+        printf("Failed to send thread ID; Error code = %lu\n", (unsigned long)GetLastError());
         return;
     }
     printf("Sent thread ID\n");
@@ -184,10 +184,14 @@ int main(int argc, char* argv[])
     DWORD data[2] = { TL_STATE_EXIT, threadID };
     if (!WriteFile(hPipe, data, TL_MSG_SIZE, NULL, NULL))
     {
-        printf("Failed to send exit command; Error code = %lu\n", static_cast<unsigned long>(GetLastError()));
+        printf("Failed to send exit command; Error code = %lu\n", (unsigned long)GetLastError());
         return 1;
     }
-    /*CloseHandle(hPipe);*/
+    CloseHandle(hPipe);
+    if (!TLEjectDll(processID))
+    {
+        return 1;
+    }
     printf("Program exit\n");
     return 0;
 }
